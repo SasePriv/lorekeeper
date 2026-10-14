@@ -6,8 +6,11 @@ Checks:
   link   Relative Markdown links (and their #anchors) resolve.
   index  Every active docs/*.md is listed in docs/README.md, and AGENTS.md
          either points to docs/README.md or lists every active doc.
-  ki     Every KI-NNN reference exists in docs/known-issues.md, ids are
-         unique, and severities are not copied (or contradicted) elsewhere.
+  ki     Every KI-NNN reference exists in the registry, ids are unique, and
+         severities are not copied (or contradicted) elsewhere. The registry
+         is docs/known-issues/ (one KI-NNN.md per issue, frontmatter validated,
+         generated index must be current) or, if that directory does not
+         exist, the single file docs/known-issues.md.
   plan   Active docs that look like plans/logs or carry manual dates (info).
 
 Usage:
@@ -29,6 +32,10 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.parse import unquote
+
+sys.dont_write_bytecode = True  # vendored copies must not leave __pycache__ in the target repo
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ki  # noqa: E402
 
 SKIP_DIRS = {
     ".git",
@@ -164,7 +171,9 @@ class DocChecker:
         self.index = RepoIndex(self.root)
         self.gitignore = GitIgnore(self.root)
         self.ignore_patterns = self._load_ignore_patterns()
-        self.registry = registry or self.root / "docs" / "known-issues.md"
+        self.registry_dir, self.registry = self._resolve_registry(registry)
+        self.issues = ki.load_issues(self.registry_dir) if self.registry_dir else []
+        self.resolved_issue_files = {i.path for i in self.issues if i.status == "resolved"}
         self.findings: list[Finding] = []
         self.docs = self._collect_docs()
         self.parsed = {doc: self._parse(doc) for doc in self.docs}
@@ -184,6 +193,24 @@ class DocChecker:
         return self._siblings
 
     # ----------------------------------------------------------- collection
+
+    def _resolve_registry(self, registry: Path | None) -> tuple[Path | None, Path | None]:
+        """Return (per-file registry directory, single-file registry); exactly one is set."""
+        if registry is not None:
+            return (registry, None) if registry.is_dir() else (None, registry)
+        directory = self.root / ki.DEFAULT_DIR
+        if directory.is_dir():
+            return directory, None
+        return None, self.root / ki.DEFAULT_LEGACY
+
+    def is_registry_doc(self, doc: Path) -> bool:
+        if self.registry_dir is not None:
+            return doc.parent == self.registry_dir
+        return doc == self.registry
+
+    def registry_label(self) -> str:
+        target = self.registry_dir or self.registry
+        return self.rel(target) if target is not None and self._inside(target) else str(target)
 
     def _load_ignore_patterns(self) -> list[str]:
         ignore_file = self.root / ".doccheckignore"
@@ -263,7 +290,10 @@ class DocChecker:
 
     @staticmethod
     def exists(base: Path, token: str) -> bool:
-        return (base / token).exists()
+        try:
+            return (base / token).exists()
+        except OSError:  # unreadable directories next to the repo (e.g. snap's private /tmp)
+            return False
 
     # ----------------------------------------------------------- path check
 
@@ -311,14 +341,14 @@ class DocChecker:
         if any(self.exists(base, token) for base in bases):
             return
 
-        if has_slash and (self.root.parent / first_segment).is_dir() and first_segment != self.root.name:
-            if not (self.root.parent / token).exists():
+        if has_slash and any(s.name == first_segment for s in self.siblings):
+            if not self.exists(self.root.parent, token):
                 self.add("WARN", "path", doc, line,
                          f"`{raw}` points to sibling repository `{first_segment}` but does not exist there")
             return
 
         matches = self.index.suffix_matches(token, is_dir=not is_file)
-        repo_like = any((base / first_segment).exists() for base in bases)
+        repo_like = any(self.exists(base, first_segment) for base in bases)
 
         if not has_slash and token.startswith(".") and not matches:
             return  # extension or attribute access such as `.cypher` / `.nodes`
@@ -341,7 +371,7 @@ class DocChecker:
                      f"`{raw}` does not exist but is gitignored (created locally?)")
             return
 
-        sibling = next((s for s in self.siblings if (s / token).exists()), None) if has_slash else None
+        sibling = next((s for s in self.siblings if self.exists(s, token)), None) if has_slash else None
         if sibling is not None:
             self.add("INFO", "path", doc, line,
                      f"`{raw}` is not in this repository; found in sibling repository "
@@ -374,6 +404,8 @@ class DocChecker:
 
     def check_paths(self) -> None:
         for doc, lines in self.parsed.items():
+            if doc in self.resolved_issue_files:
+                continue  # resolved issues are history and may cite files that no longer exist
             for doc_line in lines:
                 if IGNORE_MARKER in doc_line.raw:
                     continue
@@ -499,8 +531,10 @@ class DocChecker:
     # ------------------------------------------------------------- KI check
 
     def load_registry(self) -> dict[str, tuple[str | None, int]]:
+        if self.registry_dir is not None:
+            return self.load_registry_dir()
         defined: dict[str, tuple[str | None, int]] = {}
-        if not self.registry.is_file():
+        if self.registry is None or not self.registry.is_file():
             return defined
         for doc_line in self.parsed.get(self.registry) or self._parse(self.registry):
             if doc_line.fenced:
@@ -516,6 +550,34 @@ class DocChecker:
             defined[ki_id] = (self.severity_of(match.group(2)), doc_line.number)
         return defined
 
+    def load_registry_dir(self) -> dict[str, tuple[str | None, int]]:
+        defined: dict[str, tuple[str | None, int]] = {}
+        directory = self.registry_dir
+        for issue in self.issues:
+            for problem in ki.validate_issue(issue):
+                self.add("ERROR", "ki", issue.path, 1, problem)
+            if "TODO:" in issue.body:
+                self.add("WARN", "ki", issue.path, 1, "issue still contains TODO placeholders")
+            if not issue.id:
+                continue
+            if issue.id in defined:
+                self.add("ERROR", "ki", issue.path, 1, f"{issue.id} is defined more than once")
+                continue
+            defined[issue.id] = (issue.meta.get("severity") or None, 1)
+
+        index_path = directory / ki.INDEX_NAME
+        hint = f"run: {ki.CLI_HINT} index"
+        if not index_path.is_file():
+            self.add("ERROR", "ki", directory, 0, f"registry index {ki.INDEX_NAME} is missing; {hint}")
+        elif index_path.read_text(encoding="utf-8") != ki.render_index(self.issues):
+            self.add("ERROR", "ki", index_path, 1, f"index is stale or edited by hand; {hint}")
+
+        for path in sorted(directory.iterdir()):
+            if path.is_file() and path.suffix == ".md" and path.name != ki.INDEX_NAME \
+                    and not ki.ISSUE_FILE_RE.match(path.name):
+                self.add("WARN", "ki", path, 1, "file in the registry is not named KI-NNN.md")
+        return defined
+
     @staticmethod
     def severity_of(text: str) -> str | None:
         for emoji, severity in SEVERITY_EMOJI.items():
@@ -526,10 +588,10 @@ class DocChecker:
 
     def check_known_issues(self) -> None:
         defined = self.load_registry()
-        registry_known = self.registry.is_file()
+        registry_known = self.registry_dir is not None or (self.registry is not None and self.registry.is_file())
         reported_missing_registry = False
         for doc, lines in self.parsed.items():
-            is_registry = doc == self.registry
+            is_registry = self.is_registry_doc(doc)
             for doc_line in lines:
                 if doc_line.fenced or IGNORE_MARKER in doc_line.raw:
                     continue
@@ -539,7 +601,7 @@ class DocChecker:
                 if not registry_known:
                     if not reported_missing_registry:
                         self.add("WARN", "ki", doc, doc_line.number,
-                                 f"KI ids are referenced but {self.rel(self.registry) if self._inside(self.registry) else self.registry} does not exist")
+                                 f"KI ids are referenced but {self.registry_label()} does not exist")
                         reported_missing_registry = True
                     continue
                 for ki_id in sorted(ids):
@@ -569,7 +631,7 @@ class DocChecker:
     def check_plan_like(self) -> None:
         docs_dir = self.root / "docs"
         for doc, lines in self.parsed.items():
-            if doc.parent != docs_dir or doc.name.lower() == "readme.md" or doc == self.registry:
+            if doc.parent != docs_dir or doc.name.lower() == "readme.md" or self.is_registry_doc(doc):
                 continue
             signals: list[str] = []
             checkboxes = sum(1 for dl in lines if not dl.fenced and CHECKBOX_RE.match(dl.text))
@@ -611,7 +673,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("root", nargs="?", default=".", help="repository root (default: current directory)")
     parser.add_argument("--json", action="store_true", help="print findings as JSON")
     parser.add_argument("--strict", action="store_true", help="exit 1 on warnings too")
-    parser.add_argument("--registry", type=Path, help="known-issues file (default: docs/known-issues.md)")
+    parser.add_argument("--registry", type=Path,
+                        help="known-issues directory or file (default: docs/known-issues/ if it exists, "
+                             "else docs/known-issues.md)")
     parser.add_argument("--verbose", action="store_true", help="list every subdirectory-relative path")
     args = parser.parse_args(argv)
 

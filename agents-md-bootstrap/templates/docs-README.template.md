@@ -14,7 +14,9 @@ topic; there is no duplication between them. Agent-facing rules live in
 
 | Document | Type | Read when |
 |---|---|---|
-| [known-issues.md](known-issues.md) | registry | You find tech debt, an inconsistency or a deprecation, or need context on a `KI-NNN` reference |
+| [known-issues/README.md](known-issues/README.md) | registry | You find tech debt, an inconsistency or a deprecation, or need context on a `KI-NNN` reference (read the Open table only) |
+
+<!-- single_file registry instead: | [known-issues.md](known-issues.md) | registry | You find tech debt, an inconsistency or a deprecation, or need context on a `KI-NNN` reference | -->
 <!-- | [architecture.md](architecture.md) | cross-cutting | You need the big picture: components, data flow, environments | -->
 <!-- | [local-development.md](local-development.md) | runbook | You set up the project locally or change dev tooling | -->
 <!-- | [<feature>.md](<feature>.md) | feature | You change <feature>: <main modules> | -->

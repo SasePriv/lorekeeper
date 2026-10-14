@@ -76,8 +76,16 @@ Integration tests are **mandatory** for any change touching {{critical_areas}}:
   [docs/README.md](docs/README.md). Read the index to find the doc for the
   area you are changing.
 - Any behavior change updates the matching doc **in the same change**.
+<!-- per_file registry: -->
+- Tech debt, inconsistencies and deprecations go to `docs/known-issues/`, one
+  file per issue with a stable `KI-NNN` id, created with
+  `python3 .agents/skills/docs-policy/scripts/ki.py new` (never edit its index
+  by hand). Read only the Open table of `docs/known-issues/README.md`; other
+  docs link the id only.
+<!-- single_file registry: replace the bullet above with:
 - Tech debt, inconsistencies and deprecations go to
   `docs/known-issues.md` with a stable `KI-NNN` id; other docs link the id only.
+-->
 - Superseded docs and finished plans move to `docs/archive/`; never delete them.
 - Documentation and code comments are written in **{{docs_language}}**.
 - Full rules, doc templates and the check script:

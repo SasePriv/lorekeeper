@@ -13,7 +13,9 @@ entry point:
   invariants, and a pointer to the docs index.
 - `docs/README.md`: canonical index, one row per doc with "Read when...".
 - `docs/<topic>.md`: one document per topic, loaded on demand.
-- `docs/known-issues.md`: tech-debt registry with stable `KI-NNN` ids.
+- `docs/known-issues/`: tech-debt registry, one `KI-NNN.md` per issue plus a
+  generated index, written through `ki.py` (small repos may keep the single
+  file `docs/known-issues.md`).
 - `docs/archive/`: superseded docs and finished plans.
 - `.agents/skills/{agents-md-bootstrap,docs-policy}/`: vendored skills.
 
@@ -67,7 +69,8 @@ Collect, without writing anything:
 - **Test setup**: test directories, markers, integration test requirements.
 - **Existing instruction files**: `AGENTS.md` (also nested ones),
   `CLAUDE.md`, `.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`.
-- **Docs**: `docs/`, `docs/README.md`, `docs/known-issues.md`,
+- **Docs**: `docs/`, `docs/README.md`, the known-issues registry
+  (`docs/known-issues/` or `docs/known-issues.md`, and its entry count),
   `docs/archive/`, root `README.md`.
 - **Vendored skills**: `.agents/skills/` and the output of
   `python3 <skill-dir>/scripts/vendor_skills.py <repo-root> --check`.
@@ -92,7 +95,8 @@ tool is unavailable, ask the same questions conversationally and wait.
 | `mode` | What should I do with this repository? | `generate` - create AGENTS.md and docs scaffold (recommended when no AGENTS.md); `align` - compare the existing AGENTS.md/docs with the reference layout and propose changes (recommended when AGENTS.md exists); `audit` - report only, write nothing |
 | `git_policy` | Git policy for agents in this repo? | `confirm` - never commit without explicit user approval (Recommended); `free` - agents may commit; `none` - do not include a git policy |
 | `test_policy` | Which areas require integration tests for any change? (multi-select) | One option per detected critical area, plus `none` |
-| `docs_scaffold` | Which docs/ scaffold should exist? | `standard` - docs/README.md + known-issues.md + archive/ (Recommended); `standard_arch` - standard + architecture.md drafted from the code; `none` |
+| `docs_scaffold` | Which docs/ scaffold should exist? | `standard` - docs/README.md + known-issues registry + archive/ (Recommended); `standard_arch` - standard + architecture.md drafted from the code; `none` |
+| `ki_format` | Known-issues registry format? | `per_file` - one KI-NNN.md per issue + generated index, managed with ki.py (Recommended; also when an existing single file has more than ~20 entries); `single_file` - one docs/known-issues.md (very small repos). In align mode with an existing single file, `per_file` means proposing `ki.py migrate`. Omit if `docs_scaffold` is `none`. |
 | `other_instructions` | Other instruction files were found: <list>. What should I do? | `pointer` - replace their content with a short pointer to AGENTS.md (Recommended); `keep` - leave them untouched; `claude_symlink` - also create CLAUDE.md pointing to AGENTS.md. Omit this question if none were found, but still offer `claude_symlink` as a separate yes/no if CLAUDE.md is missing. |
 | `docs_language` | Language for AGENTS.md and docs/? | `en` - English (Recommended); `match` - the language of the existing docs; `other` |
 
@@ -107,10 +111,15 @@ In `audit` mode only `mode` is required; skip the rest.
    them; keep "Critical Invariants" even if it only has one `TODO`.
 3. Apply the answers: git policy, test policy, documentation language.
 4. Scaffold `docs/` per `docs_scaffold` using
-   [templates/docs-README.template.md](templates/docs-README.template.md) and
-   [templates/known-issues.template.md](templates/known-issues.template.md).
+   [templates/docs-README.template.md](templates/docs-README.template.md).
    Index every existing doc found in `docs/` with a "Read when..." line and
-   its type (see `docs-policy/doc-types.md`).
+   its type (see `docs-policy/doc-types.md`). Create the registry per
+   `ki_format`:
+   - `per_file`: `python3 <skill-dir>/../docs-policy/scripts/ki.py index --root <repo-root>`
+     (creates `docs/known-issues/README.md`); keep the `known-issues/README.md`
+     row of the docs index template.
+   - `single_file`: copy [templates/known-issues.template.md](templates/known-issues.template.md)
+     to `docs/known-issues.md` and point the docs index row to it.
 5. Handle other instruction files per `other_instructions` (see
    "Pointer files" below).
 
@@ -127,6 +136,11 @@ In `audit` mode only `mode` is required; skip the rest.
      from `docs/README.md`, entries without "Read when...".
    - Docs-policy violations: copied KI severities, plan-like docs that should
      be archived, manual "Last updated" fields, missing Files Reference.
+   - Registry format: if `ki_format` is `per_file` and the repo has a single
+     `docs/known-issues.md`, propose
+     `python3 <skill-dir>/../docs-policy/scripts/ki.py migrate --root <repo-root>`
+     as one item, plus one item per reference it reports (links to the old
+     file must become `known-issues/KI-NNN.md` or `known-issues/README.md`).
    - Vendored skills missing or outdated.
 2. Present the report as a numbered list grouped by file, each item with the
    proposed change. Then ask with AskQuestion (`allow_multiple: true`) which
@@ -196,5 +210,7 @@ only `@AGENTS.md`.
 - Template: [templates/AGENTS.template.md](templates/AGENTS.template.md)
 - Gold example: [reference/example-agents-md.md](reference/example-agents-md.md)
 - Docs index template: [templates/docs-README.template.md](templates/docs-README.template.md)
-- Registry template: [templates/known-issues.template.md](templates/known-issues.template.md)
+- Single-file registry template: [templates/known-issues.template.md](templates/known-issues.template.md)
+- Per-file registry CLI and issue template: the sibling `docs-policy` skill
+  (`scripts/ki.py`, `templates/known-issue.template.md`)
 - Documentation rules and doc types: the sibling `docs-policy` skill

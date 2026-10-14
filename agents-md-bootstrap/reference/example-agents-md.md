@@ -107,8 +107,11 @@ backend/
   [docs/README.md](docs/README.md). Read the index to find the doc for the
   area you are changing.
 - Any behavior change updates the matching doc **in the same change**.
-- Tech debt, inconsistencies and deprecations go to `docs/known-issues.md`
-  with a stable `KI-NNN` id; other docs link the id only.
+- Tech debt, inconsistencies and deprecations go to `docs/known-issues/`, one
+  file per issue with a stable `KI-NNN` id, created with
+  `python3 .agents/skills/docs-policy/scripts/ki.py new` (never edit its index
+  by hand). Read only the Open table of `docs/known-issues/README.md`; other
+  docs link the id only.
 - Superseded docs and finished plans move to `docs/archive/`; never delete them.
 - Documentation and code comments are written in **English**.
 - Full rules, doc templates and the check script:
@@ -140,7 +143,10 @@ any doc; it says which document to read for each kind of change.
 - **Project Structure**: packages and responsibilities only. File-level
   trees drift fastest and agents can list directories themselves.
 - **Documentation Policy**: the short "what"; the "how" is in the vendored
-  `docs-policy` skill, which travels with the repository.
+  `docs-policy` skill, which travels with the repository. The known-issues
+  registry is one file per issue: the original single file had grown to
+  ~500 lines, 70% of it resolved history an agent had to load to see eight
+  open issues. Its generated index costs a few hundred tokens instead.
 - **Docs Index**: a pointer, not a list. A second list of docs in
   `AGENTS.md` drifts away from `docs/README.md` (the original version of
   this file omitted three active docs).
@@ -155,5 +161,5 @@ any doc; it says which document to read for each kind of change.
 | [draft-system.md](draft-system.md) | feature | You touch draft creation, submission, approval or promotion (`backend/api/crud/draft_service.py`, `draft_promotion.py`) |
 | [roles-and-permissions.md](roles-and-permissions.md) | cross-cutting | You add an endpoint or change who can call one |
 | [local-development.md](local-development.md) | runbook | You set up the project locally or change dev tooling |
-| [known-issues.md](known-issues.md) | registry | You find tech debt or meet a `KI-NNN` reference |
+| [known-issues/README.md](known-issues/README.md) | registry | You find tech debt or meet a `KI-NNN` reference (read the Open table only) |
 ```

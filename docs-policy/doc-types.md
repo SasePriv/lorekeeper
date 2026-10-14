@@ -38,12 +38,15 @@ most common reason docs become stale or misleading.
 
 ## Registry
 
-- **Purpose**: Append-only list of entries with stable ids that other docs
-  link to.
-- **Lifecycle**: Entries are added and moved between sections, never
-  rewritten or renumbered.
-- **Format**: See "Known-issues registry" in [SKILL.md](SKILL.md).
-- **Examples**: `known-issues.md`.
+- **Purpose**: Set of entries with stable ids that other docs link to.
+- **Lifecycle**: Entries are created and resolved, never renumbered or
+  deleted. Writes go through a CLI so the generated index cannot drift.
+- **Format**: One file per entry plus a generated index; see
+  "Known-issues registry" in [SKILL.md](SKILL.md).
+- **Readers**: Agents read the index's open entries and open single entries
+  on demand, so the cost stays flat as history grows.
+- **Examples**: `docs/known-issues/` (or the legacy single file
+  `docs/known-issues.md` in small repositories).
 
 ## Plan / log
 
