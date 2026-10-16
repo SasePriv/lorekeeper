@@ -1,6 +1,7 @@
 ---
 name: docs-policy
 description: Keeps a repository's docs/ folder and AGENTS.md in sync with the code. One document per topic, typed documents (feature, cross-cutting, runbook, registry, plan), a known-issues registry with stable KI-NNN ids (one file per issue, written through the ki.py CLI), archiving instead of deleting, and an automated path/link/index/drift check. Use when a change alters observable behavior (features, endpoints, data models, query filters, roles, permissions, dev/test/lint commands), moves, renames or deletes files, edits anything under docs/ or AGENTS.md, or uncovers tech debt, inconsistencies or deprecations. Not needed for internal refactors that keep behavior and file paths, test-only, formatting or lint changes.
+license: MIT
 ---
 
 # Docs Policy
