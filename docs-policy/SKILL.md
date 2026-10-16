@@ -1,6 +1,6 @@
 ---
 name: docs-policy
-description: Keeps a repository's docs/ folder and AGENTS.md in sync with the code. One document per topic, typed documents (feature, cross-cutting, runbook, registry, plan), a known-issues registry with stable KI-NNN ids (one file per issue, written through the ki.py CLI), archiving instead of deleting, and an automated path/link/index check. Use when implementing or changing behavior, adding or removing features, endpoints, data models, roles or dev commands, moving or renaming files, editing anything under docs/ or AGENTS.md, or discovering tech debt, inconsistencies or deprecations.
+description: Keeps a repository's docs/ folder and AGENTS.md in sync with the code. One document per topic, typed documents (feature, cross-cutting, runbook, registry, plan), a known-issues registry with stable KI-NNN ids (one file per issue, written through the ki.py CLI), archiving instead of deleting, and an automated path/link/index/drift check. Use when a change alters observable behavior (features, endpoints, data models, query filters, roles, permissions, dev/test/lint commands), moves, renames or deletes files, edits anything under docs/ or AGENTS.md, or uncovers tech debt, inconsistencies or deprecations. Not needed for internal refactors that keep behavior and file paths, test-only, formatting or lint changes.
 ---
 
 # Docs Policy
@@ -39,6 +39,25 @@ topic and is loaded on demand through the index in `docs/README.md`.
     (`tests/unit/test_<job>.py`) so they are not mistaken for real files.
 11. **Language.** Follow the documentation language declared in `AGENTS.md`
     (English unless stated otherwise).
+12. **Split by cohesion, read by section.** ~300 lines is the signal to
+    consider splitting a feature or cross-cutting doc, not a hard limit.
+    Split when it holds independent subtopics (their own files and
+    invariants, changed separately) and index each part. Keep it whole when
+    its rules must be read together: keep the TL;DR and Table of Contents
+    accurate, make every section self-contained, and put
+    `<!-- doc-check: size-ok <reason> -->` at the top. When reading, start
+    with "TL;DR - Invariants", then open only the section you need (grep its
+    heading) instead of loading the whole doc.
+
+## When no doc update is needed
+
+- Internal refactors that change neither behavior nor file paths.
+- Test-only changes, formatting and lint fixes.
+- Dependency bumps that do not change any command.
+
+Moving, renaming, splitting or deleting files is never in this list: every
+"Files Reference" that mentions them must be updated, and the drift check
+below reports the docs whose referenced files changed.
 
 ## Choosing the document type
 
@@ -75,19 +94,24 @@ Docs checklist:
 - [ ] Updated content, invariants and Files Reference
 - [ ] Created/resolved known issues with ki.py if applicable
 - [ ] New docs are indexed in docs/README.md
-- [ ] doc_check.py passes with no errors
+- [ ] doc_check.py --diff passes with no errors and every drift warning is reviewed
 ```
 
 Run the check from the repository root (path of the vendored skill shown):
 
 ```bash
-python3 .agents/skills/docs-policy/scripts/doc_check.py .
+python3 .agents/skills/docs-policy/scripts/doc_check.py . --diff
 ```
+
+`--diff` adds the drift check: a doc whose "Files Reference" lists a file
+changed against `HEAD` (or against the merge base of `--diff <branch>`)
+without the doc itself changing gets a `WARN`. Re-read that doc; update it,
+or leave it as is if it is still accurate.
 
 Fix every `ERROR`. Review each `WARN` and either fix it or silence a confirmed
 false positive (pattern in `.doccheckignore` or
 `<!-- doc-check: ignore -->` on the line). `INFO` items are suggestions, such
-as plan-like docs that may need archiving.
+as plan-like docs that may need archiving or docs over the size budget.
 
 ## Known-issues registry
 

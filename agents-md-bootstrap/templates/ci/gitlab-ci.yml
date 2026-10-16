@@ -1,0 +1,21 @@
+# Template: job appended to .gitlab-ci.yml. Remove every comment starting with "Template:".
+# Template: set `stage` to an existing stage of the pipeline (`test` only if it is declared
+# Template: or the pipeline has no `stages:` list).
+# Template: drop the `ki.py index --check` line when the registry is single_file.
+docs-check:
+  stage: test
+  image: python:3.12  # full image: the drift check needs git
+  variables:
+    GIT_DEPTH: 0  # the drift check needs the merge base with the target branch
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - python3 .agents/skills/docs-policy/scripts/ki.py index --check
+    - |
+      if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+        git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        python3 .agents/skills/docs-policy/scripts/doc_check.py . --diff "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      else
+        python3 .agents/skills/docs-policy/scripts/doc_check.py .
+      fi

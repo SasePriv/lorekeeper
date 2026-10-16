@@ -1,3 +1,11 @@
+<!--
+Template for a feature doc. Remove this comment when generating.
+Budget: ~300 lines is the signal to consider splitting by subtopic (index
+each part in docs/README.md). If the rules must be read together, keep it
+whole and add an HTML comment "doc-check: size-ok <reason>" at the top. Readers load
+the TL;DR first and then only the section they need, so keep each section
+self-contained.
+-->
 # <Feature Name>
 
 <One paragraph: what the feature does, for whom, and why it exists.>

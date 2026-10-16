@@ -1,0 +1,29 @@
+# Template: .github/workflows/docs-check.yml (a new workflow; existing ones are not touched).
+# Remove every comment starting with "Template:" when generating.
+# Template: drop the "Known-issues index" step when the registry is single_file.
+name: Docs check
+
+on:
+  push:
+    branches: [{{default_branch}}]
+  pull_request:
+
+jobs:
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the drift check needs the merge base with the target branch
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Known-issues index
+        run: python3 .agents/skills/docs-policy/scripts/ki.py index --check
+      - name: Docs check
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            python3 .agents/skills/docs-policy/scripts/doc_check.py . --diff "origin/${{ github.base_ref }}"
+          else
+            python3 .agents/skills/docs-policy/scripts/doc_check.py .
+          fi

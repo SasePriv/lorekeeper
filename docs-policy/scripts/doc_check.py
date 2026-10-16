@@ -12,9 +12,17 @@ Checks:
          generated index must be current) or, if that directory does not
          exist, the single file docs/known-issues.md.
   plan   Active docs that look like plans/logs or carry manual dates (info).
+  size   Active docs over --max-doc-lines (info, silenced by a
+         "doc-check: size-ok <reason>" comment) and AGENTS.md over 200
+         lines (warning).
+  drift  Only with --diff: code files listed in a doc's "Files Reference"
+         changed but the doc itself did not. --diff alone compares against
+         HEAD (local changes); --diff <ref> compares against the merge base
+         of <ref> and HEAD, plus uncommitted and untracked files.
 
 Usage:
   python3 doc_check.py <repo-root> [--json] [--strict] [--verbose] [--registry PATH]
+                       [--diff [BASE]] [--max-doc-lines N]
 
 Exit code is 1 when errors are found (or warnings, with --strict).
 Silence false positives with a .doccheckignore file at the repository root
@@ -28,6 +36,7 @@ import argparse
 import fnmatch
 import json
 import re
+import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -93,6 +102,12 @@ PLAN_HEADING_RE = re.compile(
 CHECKBOX_RE = re.compile(r"^\s*[-*]\s+\[[ xX]\]\s+")
 STATUS_COMPLETE_RE = re.compile(r"status\W{0,6}\s*\**\s*(complete|completed|done|finished)\b", re.IGNORECASE)
 MANUAL_DATE_RE = re.compile(r"\*\*last updated\*\*\s*:", re.IGNORECASE)
+FILES_REFERENCE_RE = re.compile(r"\bfiles reference\b", re.IGNORECASE)
+SIZE_OK_RE = re.compile(r"doc-check:\s*size-ok\b\s*([^>]*?)\s*(?:-->|$)")
+
+DEFAULT_MAX_DOC_LINES = 300
+AGENTS_MAX_LINES = 200
+DRIFT_EXAMPLES = 3
 
 
 @dataclass
@@ -164,9 +179,12 @@ class GitIgnore:
 
 
 class DocChecker:
-    def __init__(self, root: Path, registry: Path | None, verbose: bool = False) -> None:
+    def __init__(self, root: Path, registry: Path | None, verbose: bool = False,
+                 diff_base: str | None = None, max_doc_lines: int = DEFAULT_MAX_DOC_LINES) -> None:
         self.root = root.resolve()
         self.verbose = verbose
+        self.diff_base = diff_base
+        self.max_doc_lines = max_doc_lines
         self.relative_paths: dict[Path, list[tuple[int, str, str]]] = {}
         self.index = RepoIndex(self.root)
         self.gitignore = GitIgnore(self.root)
@@ -655,6 +673,115 @@ class DocChecker:
                     self.add("INFO", "plan", doc, dl.number, "manual 'Last updated' field; rely on version control")
                     break
 
+    # ----------------------------------------------------------- size check
+
+    def is_topic_doc(self, doc: Path) -> bool:
+        rel = self.rel(doc)
+        return rel.startswith("docs/") and doc.name.lower() != "readme.md" and not self.is_registry_doc(doc)
+
+    def check_size(self) -> None:
+        for doc, lines in self.parsed.items():
+            if not self.is_topic_doc(doc) or len(lines) <= self.max_doc_lines:
+                continue
+            size_ok = next((m for dl in lines if (m := SIZE_OK_RE.search(dl.raw))), None)
+            if size_ok is None:
+                self.add("INFO", "size", doc, 1,
+                         f"{len(lines)} lines (budget {self.max_doc_lines}); split it if it holds independent "
+                         "subtopics, or justify keeping it whole with <!-- doc-check: size-ok <reason> -->")
+            elif not size_ok.group(1):
+                self.add("INFO", "size", doc, 1, "size-ok marker without a reason; say why the doc stays whole")
+        agents = self.root / "AGENTS.md"
+        if agents in self.parsed and len(self.parsed[agents]) > AGENTS_MAX_LINES:
+            self.add("WARN", "size", agents, 1,
+                     f"{len(self.parsed[agents])} lines (budget {AGENTS_MAX_LINES}); AGENTS.md is always "
+                     "loaded, move topic details to docs/")
+
+    # ---------------------------------------------------------- drift check
+
+    def git(self, *args: str) -> str | None:
+        try:
+            result = subprocess.run(["git", *args], cwd=self.root, capture_output=True, text=True, check=False)
+        except OSError:
+            return None
+        return result.stdout if result.returncode == 0 else None
+
+    def changed_files(self) -> set[str] | None:
+        """Repo-root-relative files changed against the diff base, or None if git cannot tell."""
+        if self.git("rev-parse", "--is-inside-work-tree") is None:
+            self.add("INFO", "drift", self.root, 0, "not a git repository (or git is missing); drift check skipped")
+            return None
+        if self.git("rev-parse", "--verify", "--quiet", "HEAD") is None:
+            self.add("INFO", "drift", self.root, 0, "repository has no commits yet; drift check skipped")
+            return None
+        base = "HEAD"
+        if self.diff_base != "HEAD":
+            merge_base = self.git("merge-base", self.diff_base, "HEAD")
+            if merge_base is None:
+                self.add("ERROR", "drift", self.root, 0,
+                         f"cannot find a merge base between `{self.diff_base}` and HEAD "
+                         "(unknown ref, or shallow clone: fetch the full history)")
+                return None
+            base = merge_base.strip()
+        diff = self.git("diff", "--name-only", "--relative", base)
+        untracked = self.git("ls-files", "--others", "--exclude-standard")
+        if diff is None or untracked is None:
+            self.add("ERROR", "drift", self.root, 0, f"`git diff {base}` failed; drift check skipped")
+            return None
+        return {line.strip() for line in (diff + untracked).splitlines() if line.strip()}
+
+    def files_reference(self, doc: Path) -> tuple[int, list[tuple[str, bool]]]:
+        """Return (heading line, [(path, is_dir)]) of the doc's Files Reference section."""
+        heading_line, level, entries = 0, 0, []
+        for doc_line in self.parsed[doc]:
+            if doc_line.fenced:
+                continue
+            heading = HEADING_RE.match(doc_line.text)
+            if heading:
+                if heading_line and len(heading.group(1)) <= level:
+                    break
+                if not heading_line and FILES_REFERENCE_RE.search(heading.group(2)):
+                    heading_line, level = doc_line.number, len(heading.group(1))
+                continue
+            if not heading_line or IGNORE_MARKER in doc_line.raw:
+                continue
+            for match in INLINE_CODE_RE.finditer(doc_line.text):
+                raw = match.group(1).strip()
+                token = self.normalize_path_token(raw)
+                if token is None or self.ignored(token):
+                    continue
+                if token.split("/", 1)[0] == self.root.name and "/" in token:
+                    token = token.split("/", 1)[1]
+                is_dir = raw.endswith("/") or (self.root / token).is_dir()
+                if is_dir or "/" in token or self.looks_like_file(token):
+                    entries.append((token, is_dir))
+        return heading_line, entries
+
+    def check_drift(self) -> None:
+        if self.diff_base is None:
+            return
+        changed = self.changed_files()
+        if changed is None:
+            return
+        code_changes = {f for f in changed if not f.startswith("docs/") and not self.ignored(f)}
+        if not code_changes:
+            return
+        for doc in self.parsed:
+            if not self.is_topic_doc(doc) or self.rel(doc) in changed:
+                continue
+            heading_line, entries = self.files_reference(doc)
+            if not entries:
+                continue
+            stale = sorted(
+                f for f in code_changes
+                if any(f == path or (is_dir and f.startswith(path + "/")) for path, is_dir in entries)
+            )
+            if not stale:
+                continue
+            examples = ", ".join(f"`{f}`" for f in stale[:DRIFT_EXAMPLES])
+            more = f" and {len(stale) - DRIFT_EXAMPLES} more" if len(stale) > DRIFT_EXAMPLES else ""
+            self.add("WARN", "drift", doc, heading_line,
+                     f"{examples}{more} changed but this doc was not updated; confirm it is still accurate")
+
     # ---------------------------------------------------------------- run
 
     def run(self) -> list[Finding]:
@@ -663,6 +790,8 @@ class DocChecker:
         self.check_index()
         self.check_known_issues()
         self.check_plan_like()
+        self.check_size()
+        self.check_drift()
         order = {"ERROR": 0, "WARN": 1, "INFO": 2}
         self.findings.sort(key=lambda f: (f.file, f.line, order[f.level], f.message))
         return self.findings
@@ -677,6 +806,11 @@ def main(argv: list[str] | None = None) -> int:
                         help="known-issues directory or file (default: docs/known-issues/ if it exists, "
                              "else docs/known-issues.md)")
     parser.add_argument("--verbose", action="store_true", help="list every subdirectory-relative path")
+    parser.add_argument("--diff", nargs="?", const="HEAD", metavar="BASE",
+                        help="enable the drift check against BASE (default: HEAD, i.e. local changes; "
+                             "in CI pass the target branch, e.g. origin/main)")
+    parser.add_argument("--max-doc-lines", type=int, default=DEFAULT_MAX_DOC_LINES, metavar="N",
+                        help=f"size budget for active docs (default: {DEFAULT_MAX_DOC_LINES})")
     args = parser.parse_args(argv)
 
     root = Path(args.root)
@@ -684,7 +818,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {root} is not a directory", file=sys.stderr)
         return 2
     registry = (root / args.registry).resolve() if args.registry else None
-    checker = DocChecker(root, registry, verbose=args.verbose)
+    checker = DocChecker(root, registry, verbose=args.verbose,
+                         diff_base=args.diff, max_doc_lines=args.max_doc_lines)
     findings = checker.run()
 
     summary = {level: sum(1 for f in findings if f.level == level) for level in ("ERROR", "WARN", "INFO")}

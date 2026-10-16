@@ -1,0 +1,20 @@
+# Template: job added under `jobs:` (or under the jobs of an existing stage) in azure-pipelines.yml.
+# Remove every comment starting with "Template:" when generating.
+# Template: drop the "Known-issues index" step when the registry is single_file.
+- job: docs_check
+  displayName: Docs check
+  pool:
+    vmImage: ubuntu-latest
+  steps:
+    - checkout: self
+      fetchDepth: 0  # the drift check needs the merge base with the target branch
+    - script: python3 .agents/skills/docs-policy/scripts/ki.py index --check
+      displayName: Known-issues index
+    - script: |
+        if [ "$(Build.Reason)" = "PullRequest" ]; then
+          target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
+          python3 .agents/skills/docs-policy/scripts/doc_check.py . --diff "origin/$target"
+        else
+          python3 .agents/skills/docs-policy/scripts/doc_check.py .
+        fi
+      displayName: Docs check

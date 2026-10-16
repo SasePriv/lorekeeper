@@ -66,6 +66,10 @@ Collect, without writing anything:
   `docker-compose*.yml` services, devcontainer config, CI workflows
   (`.github/workflows/`, `.gitlab-ci.yml`, `azure-pipelines.yml`). Prefer the
   commands CI runs: they are known to work.
+- **CI platform and docs check**: which of GitHub Actions, GitLab CI or Azure
+  Pipelines is in use (none, one or several), the default branch, and whether
+  any pipeline already runs `doc_check.py` or `ki.py index --check`. Feeds the
+  `ci_check` question.
 - **Test setup**: test directories, markers, integration test requirements.
 - **Existing instruction files**: `AGENTS.md` (also nested ones),
   `CLAUDE.md`, `.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`.
@@ -99,6 +103,7 @@ tool is unavailable, ask the same questions conversationally and wait.
 | `ki_format` | Known-issues registry format? | `per_file` - one KI-NNN.md per issue + generated index, managed with ki.py (Recommended; also when an existing single file has more than ~20 entries); `single_file` - one docs/known-issues.md (very small repos). In align mode with an existing single file, `per_file` means proposing `ki.py migrate`. Omit if `docs_scaffold` is `none`. |
 | `other_instructions` | Other instruction files were found: <list>. What should I do? | `pointer` - replace their content with a short pointer to AGENTS.md (Recommended); `keep` - leave them untouched; `claude_symlink` - also create CLAUDE.md pointing to AGENTS.md. Omit this question if none were found, but still offer `claude_symlink` as a separate yes/no if CLAUDE.md is missing. |
 | `docs_language` | Language for AGENTS.md and docs/? | `en` - English (Recommended); `match` - the language of the existing docs; `other` |
+| `ci_check` | Your CI (<platform>) does not run the docs check. Add it? | `add` - add a docs-check job to the detected CI (Recommended); `snippet` - only show the snippet in the summary; `none`. Omit if `docs_scaffold` is `none`, if no CI was found (the summary then gives the generic command), or if the CI already runs `doc_check.py`. |
 
 In `audit` mode only `mode` is required; skip the rest.
 
@@ -122,6 +127,7 @@ In `audit` mode only `mode` is required; skip the rest.
      to `docs/known-issues.md` and point the docs index row to it.
 5. Handle other instruction files per `other_instructions` (see
    "Pointer files" below).
+6. Apply `ci_check` (see "CI docs check" below).
 
 ### 3b. Mode: align
 
@@ -142,6 +148,8 @@ In `audit` mode only `mode` is required; skip the rest.
      as one item, plus one item per reference it reports (links to the old
      file must become `known-issues/KI-NNN.md` or `known-issues/README.md`).
    - Vendored skills missing or outdated.
+   - CI does not run `doc_check.py` (with `--diff` on pull/merge requests) or
+     `ki.py index --check`. Apply the approved item per `ci_check`.
 2. Present the report as a numbered list grouped by file, each item with the
    proposed change. Then ask with AskQuestion (`allow_multiple: true`) which
    items to apply; offer "all" and "none".
@@ -179,12 +187,39 @@ in its Documentation Policy section.
    - Every command appears in a manifest, script or CI file.
    - "Critical Invariants" contains rules, not descriptions.
    - The docs index is a pointer to `docs/README.md`, not a second list.
+3. If a CI file was added or edited: it still parses as YAML, and the diff
+   only adds the docs-check job or workflow (existing jobs untouched).
 
 ### 6. Summarize
 
 Report: mode, files created/changed, `TODO`s left for the user, pre-existing
-doc problems not fixed, vendored skill versions, and the proposed commit
-(file list + message). Do not commit.
+doc problems not fixed, vendored skill versions, the CI docs check (added,
+snippet to paste, or generic command), and the proposed commit (file list +
+message). Do not commit.
+
+## CI docs check
+
+Snippets per platform, in `<skill-dir>/templates/ci/`:
+
+| Platform | Template | Where it goes |
+|---|---|---|
+| GitHub Actions | [templates/ci/github-actions.yml](templates/ci/github-actions.yml) | New file `.github/workflows/docs-check.yml` |
+| GitLab CI | [templates/ci/gitlab-ci.yml](templates/ci/gitlab-ci.yml) | Job appended to `.gitlab-ci.yml`, with `stage` set to an existing stage |
+| Azure Pipelines | [templates/ci/azure-pipelines.yml](templates/ci/azure-pipelines.yml) | Job added to `azure-pipelines.yml` (under the right stage, if stages are used) |
+
+- Fill `{{default_branch}}` from discovery and remove the `Template:` comments.
+- Drop the `ki.py index --check` step when the registry is `single_file`.
+- Pull/merge requests run `doc_check.py . --diff origin/<target branch>`, which
+  needs the full history (the snippets set it); pushes run it without
+  `--diff`.
+- `add`: write the snippet into the detected CI. With several platforms,
+  use the one that runs the tests. `snippet`: show it in the summary only.
+- Without CI, the summary gives the generic commands to run before pushing:
+
+```bash
+python3 .agents/skills/docs-policy/scripts/doc_check.py . --diff origin/<default branch>
+python3 .agents/skills/docs-policy/scripts/ki.py index --check
+```
 
 ## Pointer files
 
@@ -211,6 +246,7 @@ only `@AGENTS.md`.
 - Gold example: [reference/example-agents-md.md](reference/example-agents-md.md)
 - Docs index template: [templates/docs-README.template.md](templates/docs-README.template.md)
 - Single-file registry template: [templates/known-issues.template.md](templates/known-issues.template.md)
+- CI docs-check snippets: [templates/ci/](templates/ci/)
 - Per-file registry CLI and issue template: the sibling `docs-policy` skill
   (`scripts/ki.py`, `templates/known-issue.template.md`)
 - Documentation rules and doc types: the sibling `docs-policy` skill

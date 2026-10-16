@@ -27,16 +27,18 @@ agent-skills/
 │   ├── SKILL.md
 │   ├── VERSION
 │   ├── templates/                 # AGENTS.md, docs/README.md, single-file docs/known-issues.md
+│   │   └── ci/                    # docs-check job for GitHub Actions, GitLab CI, Azure Pipelines
 │   ├── reference/                 # annotated gold example of an AGENTS.md
 │   └── scripts/vendor_skills.py   # copies both skills into <repo>/.agents/skills/
-└── docs-policy/
-    ├── SKILL.md
-    ├── VERSION
-    ├── doc-types.md
-    ├── templates/                 # feature, cross-cutting, runbook docs; one known issue
-    └── scripts/
-        ├── doc_check.py           # path, link, index and known-issue checks
-        └── ki.py                  # known-issues CLI: new, resolve, index, migrate
+├── docs-policy/
+│   ├── SKILL.md
+│   ├── VERSION
+│   ├── doc-types.md
+│   ├── templates/                 # feature, cross-cutting, runbook docs; one known issue
+│   └── scripts/
+│       ├── doc_check.py           # path, link, index, known-issue, size and drift checks
+│       └── ki.py                  # known-issues CLI: new, resolve, index, migrate
+└── tests/                         # tests for the scripts (not vendored)
 ```
 
 ## Install
@@ -85,7 +87,21 @@ downgrades unless `--force` is passed.
 ```bash
 python3 docs-policy/scripts/doc_check.py /path/to/repo
 python3 docs-policy/scripts/doc_check.py /path/to/repo --json
+python3 docs-policy/scripts/doc_check.py /path/to/repo --diff               # + drift against local changes
+python3 docs-policy/scripts/doc_check.py /path/to/repo --diff origin/main   # + drift for a branch / PR
 ```
+
+`--diff` enables the drift check: when a file listed in a doc's
+"Files Reference" changed (against `HEAD`, or against the merge base with the
+given ref, plus uncommitted and untracked files) but the doc did not, it
+reports a warning on that doc. It needs git and, in CI, the full history.
+Put the repository path before `--diff`, since `--diff` takes an optional
+value.
+
+The size check reports active docs over `--max-doc-lines` (default 300) as
+info and an `AGENTS.md` over 200 lines as a warning. The doc budget is a
+signal, not a limit: a doc whose rules must be read together stays whole
+with `<!-- doc-check: size-ok <reason> -->` at the top.
 
 Exit code is `1` when errors are found (`--strict` also fails on warnings).
 False positives can be silenced with a `.doccheckignore` file at the
@@ -109,10 +125,24 @@ $KI index --check    # exit 1 if the index is stale (CI-friendly)
 $KI migrate          # split a legacy docs/known-issues.md into per-issue files
 ```
 
-`migrate` archives the original file as `docs/archive/known-issues.md` and
+`migrate` archives the original file as `docs/archive/known-issues.md` and <!-- doc-check: ignore -->
 lists the documents that still link to it. `doc_check.py` validates both the
 per-file registry and the legacy single file.
+
+## Running in CI
+
+`/agents-md-bootstrap` detects the CI platform and offers to add a docs-check
+job from `agents-md-bootstrap/templates/ci/`. Pushes run `doc_check.py`;
+pull/merge requests add `--diff origin/<target branch>`; per-file registries
+also run `ki.py index --check`.
+
+## Tests
+
+```bash
+python3 -B -m unittest discover tests
+```
 
 ## Requirements
 
 - Python 3.10+ (scripts use the standard library only).
+- git, only for `doc_check.py --diff`.
