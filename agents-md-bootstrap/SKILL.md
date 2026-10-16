@@ -1,6 +1,7 @@
 ---
 name: agents-md-bootstrap
 description: Generates, aligns or audits a repository's AGENTS.md and docs/ scaffold following a progressive-disclosure layout (short always-loaded AGENTS.md, one doc per topic under docs/, indexed by docs/README.md, known-issues registry). Asks the user for policies on every run, never invents commands or paths, and vendors the agents-md-bootstrap and docs-policy skills into the repository. Use when the user invokes /agents-md-bootstrap or asks to create, standardize, align or audit AGENTS.md or the docs structure of a project.
+license: MIT
 disable-model-invocation: true
 ---
 

@@ -25,8 +25,10 @@ is installed.
 
 ```
 lorekeeper/
+├── LICENSE                        # MIT
 ├── agents-md-bootstrap/
 │   ├── SKILL.md
+│   ├── LICENSE                    # MIT, copied when the skill is vendored
 │   ├── VERSION
 │   ├── templates/                 # AGENTS.md, docs/README.md, single-file docs/known-issues.md
 │   │   └── ci/                    # docs-check job for GitHub Actions, GitLab CI, Azure Pipelines
@@ -34,6 +36,7 @@ lorekeeper/
 │   └── scripts/vendor_skills.py   # copies both skills into <repo>/.agents/skills/
 ├── docs-policy/
 │   ├── SKILL.md
+│   ├── LICENSE                    # MIT, copied when the skill is vendored
 │   ├── VERSION
 │   ├── doc-types.md
 │   ├── templates/                 # feature, cross-cutting, runbook docs; one known issue
@@ -148,3 +151,7 @@ python3 -B -m unittest discover tests
 
 - Python 3.10+ (scripts use the standard library only).
 - git, only for `doc_check.py --diff`.
+
+## License
+
+[MIT](LICENSE). Copyright (c) 2026 SasePriv.
