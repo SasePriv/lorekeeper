@@ -48,36 +48,50 @@ lorekeeper/
 
 ## Install
 
-### Global (to invoke the bootstrap in repositories that do not have it yet)
+Install both skills with the [skills CLI](https://github.com/vercel-labs/skills),
+either globally or in a single repository.
 
-Symlink both skills into the user-level skills folder, which Cursor reads:
-
-```bash
-ln -s ~/Documents/projects/lorekeeper/agents-md-bootstrap ~/.agents/skills/agents-md-bootstrap
-ln -s ~/Documents/projects/lorekeeper/docs-policy ~/.agents/skills/docs-policy
-```
-
-Once this repository is published on a Git host, it can also be installed
-with the skills CLI:
+**Globally** (`~/.agents/skills/`), to have `/agents-md-bootstrap` available
+in every repository:
 
 ```bash
-npx skills add <owner>/lorekeeper@agents-md-bootstrap -g
-npx skills add <owner>/lorekeeper@docs-policy -g
+npx skills add SasePriv/lorekeeper -g --skill '*'
 ```
 
-### Per repository (vendoring)
-
-Running `/agents-md-bootstrap` in a repository vendors both skills
-automatically. To vendor or update them manually:
+**In one repository** (`.agents/skills/`), from the repository root, so the
+skills travel with the code and every collaborator gets them:
 
 ```bash
-python3 agents-md-bootstrap/scripts/vendor_skills.py /path/to/repo           # install or upgrade
-python3 agents-md-bootstrap/scripts/vendor_skills.py /path/to/repo --check   # report only
+npx skills add SasePriv/lorekeeper --skill '*'
 ```
 
-The script compares the `VERSION` file of each skill. It copies when the
-skill is missing, upgrades when the vendored copy is older, and never
-downgrades unless `--force` is passed.
+The CLI asks which agents to install for; pass `--agent cursor` (or any other
+supported agent) to skip the prompt. To update later, run
+`npx skills update -g` or `npx skills update` in the repository.
+
+## Set up a repository (recommended)
+
+Once installed, run `/agents-md-bootstrap` in your agent from the repository
+you want to set up. It asks for the project's policies, generates or aligns
+`AGENTS.md` and the `docs/` scaffold, offers a docs-check CI job, and vendors
+both skills into `.agents/skills/` if they are not there yet. Run it again
+later to audit the repository.
+
+Without it, `docs-policy` still works, but the repository has no `AGENTS.md`
+or `docs/` index for it to keep in sync.
+
+## Contributing
+
+To edit the skills, clone this repository and symlink both skills into the
+user-level skills folder instead of installing them with the CLI, so local
+changes and `git pull` take effect immediately:
+
+```bash
+git clone https://github.com/SasePriv/lorekeeper.git ~/lorekeeper
+mkdir -p ~/.agents/skills
+ln -s ~/lorekeeper/agents-md-bootstrap ~/.agents/skills/agents-md-bootstrap
+ln -s ~/lorekeeper/docs-policy ~/.agents/skills/docs-policy
+```
 
 ## Updating a skill
 
