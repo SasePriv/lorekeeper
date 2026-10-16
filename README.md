@@ -1,4 +1,6 @@
-# agent-skills
+# Lorekeeper
+
+Keeps a repository's lore for humans and AI agents.
 
 Reusable agent skills for keeping a repository's agent instructions
 (`AGENTS.md`) and its `docs/` folder useful for both humans and AI agents.
@@ -22,7 +24,7 @@ is installed.
 ## Layout
 
 ```
-agent-skills/
+lorekeeper/
 ├── agents-md-bootstrap/
 │   ├── SKILL.md
 │   ├── VERSION
@@ -48,16 +50,16 @@ agent-skills/
 Symlink both skills into the user-level skills folder, which Cursor reads:
 
 ```bash
-ln -s ~/Documents/projects/agent-skills/agents-md-bootstrap ~/.agents/skills/agents-md-bootstrap
-ln -s ~/Documents/projects/agent-skills/docs-policy ~/.agents/skills/docs-policy
+ln -s ~/Documents/projects/lorekeeper/agents-md-bootstrap ~/.agents/skills/agents-md-bootstrap
+ln -s ~/Documents/projects/lorekeeper/docs-policy ~/.agents/skills/docs-policy
 ```
 
 Once this repository is published on a Git host, it can also be installed
 with the skills CLI:
 
 ```bash
-npx skills add <owner>/agent-skills@agents-md-bootstrap -g
-npx skills add <owner>/agent-skills@docs-policy -g
+npx skills add <owner>/lorekeeper@agents-md-bootstrap -g
+npx skills add <owner>/lorekeeper@docs-policy -g
 ```
 
 ### Per repository (vendoring)

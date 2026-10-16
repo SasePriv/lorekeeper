@@ -67,7 +67,7 @@ def decide(source: Path, target: Path, force: bool) -> tuple[str, str]:
         return "install", fmt(src_version)
     if target.resolve() == source.resolve():
         return "linked", ("source and target are the same directory; to upgrade, run this script "
-                          "from the agent-skills repository instead of the vendored copy")
+                          "from the lorekeeper repository instead of the vendored copy")
     dst_version = read_version(target)
     if force:
         return "replace", f"{fmt(dst_version)} -> {fmt(src_version)} (forced)"
